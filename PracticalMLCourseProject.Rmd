@@ -1,0 +1,189 @@
+---
+pdf_document: default
+author: 'Author: H. Moore'
+title: "Practical Machine Learning Course Project"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. In this project, the goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. 
+
+* Exactly according to the specification (Class A)
+* Throwing the elbows to the front (Class B) - mistake
+* Lifting the dumbbell only halfway (Class C) - mistake
+* Lowering the dumbbell only halfway (Class D) - mistake
+* Throwing the hips to the front (Class E) - mistake
+
+More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+
+## Task
+The goal is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing
+
+1. how you built your model
+2. how you used cross validation
+3. what you think the expected out of sample error is
+4. why you made the choices you did. 
+
+You will also use your prediction model to predict 20 different test cases.
+
+
+## Data Summary
+The training data for this project is available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data is available here:
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+
+## Overview
+The model building workflow adopted for this task follows the pattern outlined in lectures:
+
+    Question -> Input Data -> Features -> Algorithm -> Parameters -> Evaluation
+
+Choices made at each step are described within each workflow.
+
+Cross validation was used as the method for the trainControl function.  Random forest was used for the train function.
+
+
+
+## I. Question
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+
+## II. Input Data
+Load required libraries.
+```{r}
+suppressMessages(library(caret))
+suppressMessages(library(randomForest))
+suppressMessages(library(e1071))
+```
+
+### Download Data
+```{r}
+urlTrainingData <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(urlTrainingData, destfile = "pmlTrainingData.csv")
+
+urlTestData <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(urlTestData, destfile = "pmlTestData.csv")
+```
+
+### Load and Cleanse Data
+Upon inspection certain columns have NA, #DIV/0! and blank data values.  These values are not valid values and will be removed.
+```{r}
+pmlTrainingData <- read.csv("pmlTrainingData.csv", na.strings=c("NA","","#DIV/0!"))
+pmlTrainingData <- pmlTrainingData[,colSums(is.na(pmlTrainingData)) == 0] 
+```
+
+```{r}
+pmlTestData <- read.csv("pmlTestData.csv", na.strings=c("NA","","#DIV/0!"))
+pmlTestData <- pmlTestData[,colSums(is.na(pmlTestData)) == 0] 
+```
+
+### Exploratory Analysis
+
+#### Summary of the data
+```{r}
+dim(pmlTrainingData)
+str(pmlTrainingData)
+```
+
+```{r}
+dim(pmlTestData)
+str(pmlTestData)
+```
+
+
+## III. Features
+
+#### Reduce the number of variables by removing non-predictors from the training and test data sets.
+```{r}
+pmlTrainingData <- pmlTrainingData[,-c(1:7)]
+pmlTestData <- pmlTestData[,-c(1:7)]
+dim(pmlTrainingData)
+```
+
+
+## IV. Algorithm
+
+#### Partition data into training and testing/validation sets.  Use 60/40 split because of the size of the training data set.
+```{r}
+set.seed(3233)
+partPmlTrainingData <- createDataPartition(pmlTrainingData$classe, p = 0.6, list = FALSE)
+partTraining <- pmlTrainingData[ partPmlTrainingData,]
+partTesting <- pmlTrainingData[-partPmlTrainingData,]
+```
+
+#### Construct model using Random Forest method and Cross Validation with the number of fold equal to 4 on the training data.  Attempt to improve accuracy by normalization by setting the preProcess to center and scale.
+```{r}
+modelFilename <- "modFitPartTraining.RData"
+
+if (!file.exists(modelFilename)) {
+modFitPartTraining <- train(classe ~.
+                            , data = partTraining
+                            , method = "rf"
+                            , metric = "Accuracy"
+                            , preProcess = c("center", "scale")
+                            , trControl = trainControl(method = "cv"
+                                                       , number = 4
+                                                       , p = 0.60)
+                      )
+save(modFitPartTraining, file = "modFitPartTraining.RData")
+} else {
+  #Use cached model
+  load(file = modelFilename, verbose = TRUE)
+}
+```
+
+```{r}
+modFitPartTraining
+```
+
+## V. Parameters/Prediction
+
+#### Display variables that will be used as predictors in the training data.
+```{r}
+dimnames(pmlTrainingData)[[2]]
+```
+
+#### Predict the activity performed using the training data against the testing data.
+```{r}
+predict.test <- predict(modFitPartTraining, partTesting)
+```
+
+## VI. Evaluation
+
+#### Test
+Check the accuracy of the model by comparing the predictions to the actual results.
+```{r}
+confusionMatrix(predict.test, partTesting$classe)
+```
+Accuracy rate is very high at 0.9903.  The accuracy rate is within the 95% confidence rate interval which indicates we are confident of this result.
+
+#### Out of Sample Error
+The out-of-sample error is 0.0097 or 0.97%
+
+#### Final Model
+```{r}
+modFitPartTraining$finalModel
+```
+
+#### Variable Importance
+```{r}
+varImp(modFitPartTraining)
+```
+The number of folds were 4 with 27 of the variable were tried at each split.  The OOB estimate of error rate is 0.9%.
+
+
+## Validation/Quiz
+```{r}
+print(predict(modFitPartTraining, pmlTestData))
+```
+
+
+## Acknowledgement
+http://groupware.les.inf.puc-rio.br/har#sbia_paper_section
